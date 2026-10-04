@@ -1,0 +1,20 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Las clientas solo pueden SUBIR fotos de sus pedidos (imagen, máx. 5 MB). Verlas funciona por el enlace
+    // con token que guarda cada pedido.
+    match /Fotos Subidas/{archivo} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.size < 5 * 1024 * 1024
+                    && request.resource.contentType.matches('image/.*');
+    }
+
+    // Todo lo demás: solo el personal (cualquier usuario que no sea de clientas ni del taller).
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null
+                         && !request.auth.token.email.matches('.*@(clientas|taller)\\.carols\\.app');
+    }
+  }
+}

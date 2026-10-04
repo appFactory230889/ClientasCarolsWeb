@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#E896B8" />
+  <title>Carol´s · Historial de mis pedidos</title>
+  <link rel="icon" href="img/logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <img src="img/logo.png" alt="" />
+    <div class="marca">Distribuidora Carol´s<small id="nombre-clienta">Historial de mis pedidos</small></div>
+    <span class="espacio"></span>
+    <button class="btn btn-claro btn-chico" id="btn-salir" type="button">Salir</button>
+  </header>
+
+  <main>
+    <div class="barra-busqueda">
+      <input id="filtro-fecha" type="date" aria-label="Buscar por fecha" />
+      <button class="btn btn-claro" id="btn-limpiar" type="button" hidden>Quitar</button>
+    </div>
+    <p class="ayuda" style="margin:-4px 0 12px;">Busque por la fecha de entrega o por la fecha en que hizo el pedido.</p>
+
+    <div id="lista-pedidos"><div class="vacio">Cargando sus pedidos…</div></div>
+  </main>
+
+  <a class="flotante" href="crear-pedido.html">＋ Nuevo pedido</a>
+
+  <div class="fondo-dialogo" id="dialogo" hidden>
+    <div class="dialogo">
+      <h2 id="dialogo-titulo">Pedido</h2>
+      <div id="dialogo-cuerpo"></div>
+      <button class="btn btn-bloque" id="dialogo-cerrar" type="button" style="margin-top:14px;">Cerrar</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/pedidos.js"></script>
+</body>
+</html>

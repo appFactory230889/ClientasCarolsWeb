@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#E896B8" />
+  <title>Carol´s · Mis pedidos</title>
+  <link rel="icon" href="img/logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="login">
+    <img class="logo" src="img/logo.png" alt="Carol´s" />
+    <h1>Distribuidora Carol´s</h1>
+    <p class="sub">Ingrese con el usuario que le compartimos por WhatsApp</p>
+
+    <form id="form-login" class="vidrio" novalidate>
+      <div class="campo" id="campo-telefono">
+        <label for="telefono">Teléfono</label>
+        <input id="telefono" type="tel" inputmode="numeric" autocomplete="username" placeholder="Ej. 77001122" />
+        <div class="error-texto">Ingrese su número de teléfono</div>
+      </div>
+      <div class="campo" id="campo-contrasena">
+        <label for="contrasena">Contraseña</label>
+        <input id="contrasena" type="password" autocomplete="current-password" />
+        <div class="error-texto">Ingrese su contraseña</div>
+      </div>
+      <button class="btn btn-bloque" id="btn-entrar" type="submit">Entrar</button>
+      <p id="mensaje" class="ayuda" style="margin-top:12px;"></p>
+    </form>
+
+    <p class="ayuda">¿No tiene usuario? Escríbanos por WhatsApp y se lo creamos.</p>
+    <div class="pie-marca"><img src="img/powered.png" alt="Powered by App Factory" /></div>
+  </div>
+  <script type="module" src="js/login.js"></script>
+</body>
+</html>

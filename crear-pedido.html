@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#E896B8" />
+  <title>Carol´s · Nuevo pedido</title>
+  <link rel="icon" href="img/logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <img src="img/logo.png" alt="" />
+    <div class="marca">Distribuidora Carol´s<small id="nombre-clienta">Nuevo pedido</small></div>
+    <span class="espacio"></span>
+    <a class="btn btn-claro btn-chico" href="pedidos.html">Mis pedidos</a>
+  </header>
+
+  <main>
+    <section class="vidrio">
+      <h2>1. ¿Para qué fecha lo necesita?</h2>
+      <div class="campo" id="campo-fecha">
+        <input id="fecha-entrega" type="date" />
+        <div class="error-texto">Elija la fecha en que necesita su pedido</div>
+      </div>
+      <p class="ayuda">Nosotros le confirmaremos la fecha de entrega final.</p>
+    </section>
+
+    <section class="vidrio">
+      <h2>2. Agregue sus prendas</h2>
+
+      <div class="conmutador">
+        <button type="button" id="metodo-catalogo" class="activo">Del catálogo</button>
+        <button type="button" id="metodo-foto">Mi propia foto</button>
+      </div>
+
+      <div id="bloque-catalogo">
+        <div class="campo" id="campo-codigo">
+          <label for="codigo-catalogo">Código de la prenda en el catálogo</label>
+          <div class="barra-busqueda" style="margin:0;">
+            <input id="codigo-catalogo" type="text" inputmode="text" autocomplete="off" placeholder="Ej. 1025" />
+            <button class="btn" id="btn-buscar" type="button">Buscar</button>
+          </div>
+          <div class="error-texto">No encontramos esa prenda. Revise el código.</div>
+        </div>
+      </div>
+
+      <div id="bloque-foto" hidden>
+        <div class="campo">
+          <label for="foto-propia">Foto de la prenda</label>
+          <input id="foto-propia" type="file" accept="image/*" />
+        </div>
+      </div>
+
+      <img id="vista-previa" class="vista-previa" alt="" hidden />
+
+      <div class="campo" id="campo-talla">
+        <label for="talla">Talla</label>
+        <select id="talla">
+          <option value="">Seleccione…</option>
+          <option>XXS</option><option>XS</option><option>S</option><option>M</option>
+          <option>L</option><option>XL</option><option>XXL</option>
+        </select>
+        <div class="error-texto">Elija la talla</div>
+      </div>
+
+      <div class="campo" id="campo-tela">
+        <label for="tela">Tipo de tela</label>
+        <select id="tela"><option value="">Cargando…</option></select>
+        <div class="error-texto">Elija el tipo de tela</div>
+      </div>
+
+      <div class="campo" id="campo-color" hidden>
+        <label>Color</label>
+        <div id="lista-colores" class="colores"></div>
+        <input id="color-texto" type="text" placeholder="Escriba el color que desea" hidden />
+        <p id="sin-colores" class="ayuda" hidden>Por ahora no hay colores disponibles de esta tela. Elija otra tela.</p>
+        <div class="error-texto">Elija el color</div>
+      </div>
+
+      <div class="campo" id="campo-especificaciones">
+        <label for="especificaciones">Especificaciones</label>
+        <textarea id="especificaciones" placeholder="Ej. largo, detalles, medidas especiales…"></textarea>
+        <div class="error-texto">Escriba las especificaciones de la prenda</div>
+      </div>
+
+      <p id="precio-info" class="ayuda" hidden></p>
+      <button class="btn btn-bloque" id="btn-agregar" type="button">Agregar al pedido</button>
+    </section>
+
+    <section class="vidrio">
+      <h2>3. Su pedido</h2>
+      <div id="lista-prendas"><div class="vacio" style="padding:18px 0;">Aún no ha agregado prendas.</div></div>
+      <div class="total" id="bloque-total" hidden><span>Total</span><span id="total">$0.00</span></div>
+      <p class="ayuda" id="nota-total" hidden>Las prendas con "precio por confirmar" se cotizan al revisar su pedido.</p>
+      <button class="btn btn-bloque" id="btn-enviar" type="button" style="margin-top:12px;" disabled>Enviar pedido</button>
+    </section>
+  </main>
+
+  <div class="fondo-dialogo" id="dialogo-exito" hidden>
+    <div class="dialogo" style="text-align:center;">
+      <h2>¡Pedido enviado!</h2>
+      <p>Su código de pedido es</p>
+      <p style="font-size:1.8rem;font-weight:800;margin:6px 0;" id="codigo-enviado"></p>
+      <p class="ayuda">Lo recibimos y lo revisaremos. Puede darle seguimiento en “Mis pedidos”.</p>
+      <a class="btn btn-bloque" href="pedidos.html" style="margin-top:14px;">Ir a mis pedidos</a>
+    </div>
+  </div>
+
+  <script type="module" src="js/crear-pedido.js"></script>
+</body>
+</html>
