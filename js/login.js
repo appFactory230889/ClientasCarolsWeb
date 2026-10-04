@@ -42,3 +42,16 @@ form.addEventListener("submit", async (e) => {
     btn.textContent = "Entrar";
   }
 });
+
+// Ojito: muestra u oculta la contraseña.
+const campoContrasena = document.getElementById("contrasena");
+const btnOjo = document.getElementById("btn-ojo");
+btnOjo.addEventListener("click", () => {
+  const visible = campoContrasena.type === "password";
+  campoContrasena.type = visible ? "text" : "password";
+  btnOjo.setAttribute("aria-pressed", String(visible));
+  btnOjo.setAttribute("aria-label", visible ? "Ocultar contraseña" : "Mostrar contraseña");
+  btnOjo.querySelector(".ojo-abierto").toggleAttribute("hidden", visible);
+  btnOjo.querySelector(".ojo-tachado").toggleAttribute("hidden", !visible);
+  campoContrasena.focus();
+});

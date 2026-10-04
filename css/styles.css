@@ -192,3 +192,13 @@ button, .btn { font-family: inherit; cursor: pointer; }
   padding: 10px 12px; margin: 10px 0; border-radius: 12px;
   background: rgba(255, 255, 255, 0.7); font-size: 0.85rem; color: var(--texto-suave);
 }
+
+/* ---------- Ojo para ver la contraseña ---------- */
+.con-ojo { position: relative; }
+.con-ojo input { padding-right: 52px; }
+.ojo {
+  position: absolute; top: 0; right: 0; height: 100%; width: 50px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--texto-suave); border-radius: 0 12px 12px 0;
+}
+.ojo:hover, .ojo:focus-visible { color: var(--negro); }
