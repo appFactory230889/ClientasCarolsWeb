@@ -1,5 +1,4 @@
 import { iniciarSesion, haySesion } from "./sesion.js";
-import { limpiarTelefono } from "./utils.js";
 
 // Si ya hay una sesión válida abierta se entra directo.
 haySesion().then((hay) => {
@@ -17,16 +16,16 @@ function marcar(campoId, conError) {
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   mensaje.textContent = "";
-  const telefono = limpiarTelefono(document.getElementById("telefono").value);
+  const identificador = document.getElementById("telefono").value.trim();
   const contrasena = document.getElementById("contrasena").value;
-  marcar("campo-telefono", telefono.length < 7);
+  marcar("campo-telefono", identificador.length < 7);
   marcar("campo-contrasena", !contrasena);
-  if (telefono.length < 7 || !contrasena) return;
+  if (identificador.length < 7 || !contrasena) return;
 
   btn.disabled = true;
   btn.textContent = "Entrando…";
   try {
-    await iniciarSesion(telefono, contrasena);
+    await iniciarSesion(identificador, contrasena);
     window.location.replace("pedidos.html");
   } catch (error) {
     // Mismo mensaje para "no existe" y "contraseña mala": no se revela qué teléfonos tienen usuario.

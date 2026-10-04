@@ -1,26 +1,32 @@
 {
   "rules": {
-    ".read": "auth != null && !auth.token.email.matches(/.*@(clientas|taller)\\.carols\\.app/)",
-    ".write": "auth != null && !auth.token.email.matches(/.*@(clientas|taller)\\.carols\\.app/)",
+    ".read": "auth != null && root.child('STAFF').child(auth.uid).val() === true",
+    ".write": "auth != null && root.child('STAFF').child(auth.uid).val() === true",
 
-    "TELAS": { ".read": "auth != null" },
-    "COLORES": { ".read": "auth != null" },
-    "CATALOGO": { ".read": "auth != null" },
+    "CLIENTAS_WEB": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "TELAS": { ".read": "auth != null && root.child('CLIENTAS_WEB').child(auth.uid).exists()" },
+    "COLORES": { ".read": "auth != null && root.child('CLIENTAS_WEB').child(auth.uid).exists()" },
+    "CATALOGO": { ".read": "auth != null && root.child('CLIENTAS_WEB').child(auth.uid).exists()" },
 
     "TODOS LOS CLIENTES": {
       "CAROLS": {
         "$tel": {
-          ".read": "auth != null && auth.token.email == $tel + '@clientas.carols.app'"
+          ".read": "auth != null && root.child('CLIENTAS_WEB').child(auth.uid).val() === $tel"
         }
       }
     },
 
     "PEDIDOS": {
       "$tel": {
-        ".read": "auth != null && auth.token.email == $tel + '@clientas.carols.app'",
+        ".read": "auth != null && root.child('CLIENTAS_WEB').child(auth.uid).val() === $tel",
         "$pedido": {
           "$nodo": {
-            ".write": "auth != null && auth.token.email == $tel + '@clientas.carols.app' && !data.exists()"
+            ".write": "auth != null && root.child('CLIENTAS_WEB').child(auth.uid).val() === $tel && !data.exists()"
           }
         }
       }
@@ -30,23 +36,10 @@
       "Pedidos Carol´s": {
         ".indexOn": ["fechaDeRecepcion"],
         "$codigo": {
-          ".write": "auth != null && !data.exists() && newData.child('codigoDeCliente').exists() && auth.token.email == newData.child('codigoDeCliente').val() + '@clientas.carols.app'"
+          ".write": "auth != null && !data.exists() && newData.child('codigoDeCliente').exists() && root.child('CLIENTAS_WEB').child(auth.uid).val() === newData.child('codigoDeCliente').val()"
         }
       },
       "Pedidos de Vendedoras": { ".indexOn": ["fechaDeRecepcion"] }
-    },
-
-    "ASISTENCIA": {
-      "$tel": {
-        ".read": "auth != null && auth.token.email == $tel + '@taller.carols.app'",
-        "$dia": {
-          ".write": "auth != null && auth.token.email == $tel + '@taller.carols.app' && !data.child('pagado').exists()"
-        }
-      }
-    },
-
-    "RRHH": {
-      "Configuracion": { ".read": "auth != null" }
     }
   }
 }

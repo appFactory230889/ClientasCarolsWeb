@@ -2,19 +2,26 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Las clientas solo pueden SUBIR fotos de sus pedidos (imagen, máx. 5 MB). Verlas funciona por el enlace
-    // con token que guarda cada pedido.
+    // Storage NO puede consultar la Realtime Database (no ve CLIENTAS_WEB ni STAFF), así que el personal se
+    // identifica por su correo. Escriba aquí los correos con los que entra al ERP, a Carol's 5.0 y a la app de
+    // vendedoras (en minúsculas).
+    function esPersonal() {
+      return request.auth != null
+          && request.auth.token.email in ['CORREO_DE_LA_ADMINISTRADORA@gmail.com'];
+    }
+
+    // Las clientas solo SUBEN fotos de sus pedidos: imagen y máximo 5 MB. Verlas funciona por el enlace con
+    // token que guarda cada pedido (no depende de estas reglas).
     match /Fotos Subidas/{archivo} {
-      allow read: if request.auth != null;
       allow create: if request.auth != null
                     && request.resource.size < 5 * 1024 * 1024
                     && request.resource.contentType.matches('image/.*');
+      allow read, update, delete: if esPersonal();
     }
 
-    // Todo lo demás: solo el personal (cualquier usuario que no sea de clientas ni del taller).
+    // Todo lo demás (comprobantes de finanzas, facturas, logos...): solo el personal.
     match /{allPaths=**} {
-      allow read, write: if request.auth != null
-                         && !request.auth.token.email.matches('.*@(clientas|taller)\\.carols\\.app');
+      allow read, write: if esPersonal();
     }
   }
 }
