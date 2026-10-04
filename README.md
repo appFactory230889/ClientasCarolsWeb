@@ -7,10 +7,20 @@ creen pedidos nuevos. No es para las clientas de las vendedoras: solo entra quie
 ## Páginas
 | Archivo | Qué hace |
 |---|---|
-| `index.html` + `js/login.js` | Login con **correo (o teléfono) y contraseña**. No hay registro. |
-| `pedidos.html` + `js/pedidos.js` | Historial de sus pedidos (`PEDIDOS/{tel}/mis pedidos`), buscador por fecha de entrega o de creación y detalle de prendas. |
-| `crear-pedido.html` + `js/crear-pedido.js` | Nuevo pedido: prendas del catálogo (código) o con su propia foto; las telas salen de `TELAS` y **solo se ofrecen colores disponibles** (`COLORES/{tela}`, los marcados "No disponible" en el ERP no aparecen). |
+| `index.html` + `js/login.js` | Login con **correo y contraseña** (la contraseña es su teléfono). No hay registro. |
+| `pedidos.html` + `js/pedidos.js` | Historial (`PEDIDOS/{tel}/mis pedidos`) con buscador por fecha de entrega o de creación. Cada pedido tiene **Ver prendas**; si está abierto también **Continuar** y **Cerrar pedido**. |
+| `pedido-detalle.html` + `js/pedido-detalle.js` | Página aparte con el detalle completo del pedido. Abierto: agregar más prendas o cerrarlo. Cerrado: solo consulta. |
+| `crear-pedido.html` + `js/crear-pedido.js` | Pestañas **Agregar prenda** / **Detalle del pedido**. Prendas del catálogo (código) o con su propia foto; las telas salen de `TELAS` y **solo se ofrecen colores disponibles** (`COLORES/{tela}`). |
+| `js/pedidos-datos.js` | Toda la lectura/escritura de pedidos (crear, agregar, quitar, cerrar). |
 | `js/sesion.js` | Sesión; encuentra a la clienta por `CLIENTAS_WEB/{uid}` y verifica que sea de Carol´s. |
+
+## Cómo funciona un pedido
+1. Al guardar la **primera prenda** se crea el pedido en estado **abierto** (con la fecha que pidió la clienta).
+2. **Cada prenda se guarda al instante**. Si se le cierra la página o el celular, entra a *Mis pedidos* y toca **Continuar**.
+3. Un pedido **abierto** solo lo ve la clienta (todavía no aparece en Ventas del ERP).
+4. Con **Cerrar pedido** (siempre con una alerta de confirmación) queda **cerrado**: la clienta ya no puede agregar ni
+   quitar prendas y se registra en `VENTAS GLOBALES/Pedidos Carol´s`, así que aparece en Ventas del ERP como "Web clientas".
+   Desde ahí el equipo de Carol´s sí puede agregar, editar o eliminar prendas.
 
 ## Cómo se da acceso a una clienta (tú, como administradora)
 
@@ -37,8 +47,8 @@ crearse una cuenta propia con la clave pública de la web; por eso la seguridad 
 de las reglas:
 
 - `reglas-firebase-propuesta.json` (Realtime Database → Rules). Solo el personal (`STAFF/{uid} = true`) lee y escribe
-  todo; cada clienta enlazada en `CLIENTAS_WEB` lee únicamente su historial y su ficha, y **crea** pedidos nuevos a su
-  nombre (no puede modificar ni borrar los existentes ni ver los de otras).
+  todo; cada clienta enlazada en `CLIENTAS_WEB` lee únicamente su historial y su ficha, y puede crear y modificar prendas
+  **solo mientras su pedido esté abierto** (al cerrarlo, las reglas ya no se lo permiten); no puede ver los de otras.
 - `storage-propuesta.rules` (Storage → Rules). Las clientas solo suben imágenes de hasta 5 MB; lo demás es del personal
   (por correo: escribe el tuyo en el archivo).
 
@@ -60,5 +70,5 @@ Settings → Pages. Luego, en Firebase Console → Authentication → Settings �
 Una sola operación atómica al enviar:
 - `PEDIDOS/{tel}/{codigo}/{nodoID}` cada prenda · `PEDIDOS/{tel}/mis pedidos/{codigo}` resumen (monto, fechas, estatus,
   `origen: "Web clientas"`) · `VENTAS GLOBALES/Pedidos Carol´s/{codigo}` para que aparezca en Ventas del ERP.
-- Código de pedido de 6 dígitos (HHmmss); se verifica que no esté tomado antes de usarlo.
+- Código de pedido de 6 dígitos al azar; se verifica que no esté tomado antes de usarlo y de nuevo al cerrar.
 - Las fotos propias se reducen a 1280 px antes de subirlas a `Fotos Subidas/`.

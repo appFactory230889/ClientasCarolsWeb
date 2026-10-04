@@ -171,3 +171,24 @@ button, .btn { font-family: inherit; cursor: pointer; }
 .login .campo { text-align: left; }
 .pie-marca { text-align: center; padding: 16px 0 8px; }
 .pie-marca img { width: 150px; height: auto; opacity: 0.9; }
+
+/* ---------- Pestañas (como en el ERP web) ---------- */
+.pestanas {
+  display: flex; gap: 4px; padding: 4px; margin-bottom: 12px;
+  background: var(--vidrio); border: 1px solid var(--borde-vidrio); border-radius: var(--radio);
+}
+.pestanas button {
+  flex: 1; min-height: 44px; border: none; border-radius: 12px; background: transparent;
+  font-weight: 600; font-size: 0.9rem; color: var(--texto-suave);
+}
+.pestanas button.activo { background: var(--negro); color: #fff; }
+.panel { display: none; }
+.panel.activo { display: block; }
+
+/* ---------- Acciones de una tarjeta ---------- */
+.acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.acciones .btn { flex: 1 1 auto; }
+.aviso-caja {
+  padding: 10px 12px; margin: 10px 0; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7); font-size: 0.85rem; color: var(--texto-suave);
+}

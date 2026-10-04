@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#E896B8" />
+  <title>Carol´s · Detalle del pedido</title>
+  <link rel="icon" href="img/logo.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <img src="img/logo.png" alt="" />
+    <div class="marca">Distribuidora Carol´s<small id="subtitulo">Detalle del pedido</small></div>
+    <span class="espacio"></span>
+    <a class="btn btn-claro btn-chico" href="pedidos.html">Mis pedidos</a>
+  </header>
+
+  <main>
+    <section class="vidrio" id="resumen">
+      <div class="vacio" style="padding:18px 0;">Cargando…</div>
+    </section>
+
+    <div class="acciones" id="acciones" hidden>
+      <a class="btn btn-claro" id="btn-continuar" href="#">Agregar más prendas</a>
+      <button class="btn" id="btn-cerrar" type="button">Cerrar pedido</button>
+    </div>
+    <p class="aviso-caja" id="nota-cerrado" hidden>
+      Este pedido ya está cerrado. Si necesita cambiar algo, escríbanos y el equipo de Carol´s lo modifica por usted.
+    </p>
+
+    <h2 style="margin:18px 4px 8px;font-size:1.05rem;">Prendas</h2>
+    <div id="lista-prendas"></div>
+  </main>
+
+  <script type="module" src="js/pedido-detalle.js"></script>
+</body>
+</html>

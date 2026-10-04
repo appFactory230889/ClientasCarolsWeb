@@ -1,21 +1,17 @@
 import { db } from "./firebase-config.js";
-import { ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
+import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
 import { exigirSesion, cerrarSesion } from "./sesion.js";
-import { escapeHtml, dinero, precio, parsearFecha, aISO, entradas } from "./utils.js";
+import { escapeHtml, dinero, parsearFecha, aISO, entradas, aviso } from "./utils.js";
+import { cerrarPedido, TEXTO_CIERRE } from "./pedidos-datos.js";
 
 const lista = document.getElementById("lista-pedidos");
 const filtro = document.getElementById("filtro-fecha");
 const btnLimpiar = document.getElementById("btn-limpiar");
-const dialogo = document.getElementById("dialogo");
 
 let clienta = null;
 let pedidos = []; // { codigo, ...resumen }
 
 document.getElementById("btn-salir").addEventListener("click", cerrarSesion);
-document.getElementById("dialogo-cerrar").addEventListener("click", () => (dialogo.hidden = true));
-dialogo.addEventListener("click", (e) => {
-  if (e.target === dialogo) dialogo.hidden = true;
-});
 
 // Historial de la clienta: PEDIDOS/{tel}/mis pedidos/{codigoPedido}
 exigirSesion().then((c) => {
@@ -27,14 +23,16 @@ exigirSesion().then((c) => {
       pedidos = entradas(snap.val())
         .filter(([, p]) => p && typeof p === "object")
         .map(([codigo, p]) => ({ codigo: p.codigoDePedido || codigo, ...p }));
-      pedidos.sort((a, b) => clave(b) - clave(a));
+      // Primero los abiertos (para retomarlos) y luego el más reciente por fecha de entrega.
+      pedidos.sort((a, b) => (esAbierto(b) - esAbierto(a)) || (clave(b) - clave(a)));
       pintar();
     },
     () => (lista.innerHTML = '<div class="vacio">No se pudo cargar su historial. Intente de nuevo.</div>')
   );
 });
 
-// Más reciente primero: por fecha de entrega.
+const esAbierto = (p) => (p.estatus === "abierto" ? 1 : 0);
+
 function clave(p) {
   const f = parsearFecha(p.fechaDeRecepcion);
   return f ? f.getTime() : 0;
@@ -50,6 +48,19 @@ btnLimpiar.addEventListener("click", () => {
   pintar();
 });
 
+// Si ya tiene un pedido abierto, se le ofrece continuarlo en vez de abrir otro.
+document.getElementById("btn-nuevo").addEventListener("click", (e) => {
+  const abierto = pedidos.find((p) => p.estatus === "abierto");
+  if (!abierto) return;
+  const continuar = window.confirm(
+    `Usted tiene el pedido ${abierto.codigo} abierto.\n\nAceptar: continuar con ese pedido.\nCancelar: empezar un pedido nuevo.`
+  );
+  if (continuar) {
+    e.preventDefault();
+    window.location.href = `crear-pedido.html?codigo=${encodeURIComponent(abierto.codigo)}`;
+  }
+});
+
 function coincide(p) {
   if (!filtro.value) return true;
   const entrega = parsearFecha(p.fechaDeRecepcion);
@@ -57,8 +68,8 @@ function coincide(p) {
 }
 
 function etiquetaEstado(estatus) {
-  if (estatus === "cerrado") return '<span class="etiqueta verde">Recibido</span>';
-  if (estatus === "abierto") return '<span class="etiqueta">En captura</span>';
+  if (estatus === "cerrado") return '<span class="etiqueta verde">Cerrado</span>';
+  if (estatus === "abierto") return '<span class="etiqueta roja">Abierto · puede seguir agregando</span>';
   return estatus ? `<span class="etiqueta">${escapeHtml(estatus)}</span>` : "";
 }
 
@@ -73,8 +84,10 @@ function pintar() {
     return;
   }
   lista.innerHTML = visibles
-    .map(
-      (p) => `
+    .map((p) => {
+      const cod = encodeURIComponent(p.codigo);
+      const abierto = p.estatus === "abierto";
+      return `
       <div class="vidrio">
         <div class="fila">
           <div class="crece">
@@ -85,40 +98,28 @@ function pintar() {
           </div>
           <div class="precio ${Number(p.monto) > 0 ? "" : "pendiente"}">${Number(p.monto) > 0 ? dinero(p.monto) : "Por confirmar"}</div>
         </div>
-        <button class="btn btn-claro btn-chico" style="margin-top:10px;" data-codigo="${escapeHtml(p.codigo)}" type="button">Ver prendas</button>
-      </div>`
-    )
+        <div class="acciones">
+          <a class="btn btn-claro btn-chico" href="pedido-detalle.html?codigo=${cod}">Ver prendas</a>
+          ${abierto ? `<a class="btn btn-claro btn-chico" href="crear-pedido.html?codigo=${cod}">Continuar</a>
+          <button class="btn btn-chico" data-cerrar="${escapeHtml(p.codigo)}" type="button">Cerrar pedido</button>` : ""}
+        </div>
+      </div>`;
+    })
     .join("");
-  lista.querySelectorAll("[data-codigo]").forEach((b) => b.addEventListener("click", () => verDetalle(b.dataset.codigo)));
+  lista.querySelectorAll("[data-cerrar]").forEach((b) => b.addEventListener("click", () => cerrar(b)));
 }
 
-async function verDetalle(codigo) {
-  document.getElementById("dialogo-titulo").textContent = `Pedido ${codigo}`;
-  const cuerpo = document.getElementById("dialogo-cuerpo");
-  cuerpo.innerHTML = '<div class="vacio">Cargando…</div>';
-  dialogo.hidden = false;
+async function cerrar(boton) {
+  if (!window.confirm(TEXTO_CIERRE)) return;
+  boton.disabled = true;
+  boton.textContent = "Cerrando…";
   try {
-    const snap = await get(ref(db, `PEDIDOS/${clienta.tel}/${codigo}`));
-    const piezas = entradas(snap.val()).filter(([, p]) => p && typeof p === "object");
-    if (!piezas.length) {
-      cuerpo.innerHTML = '<div class="vacio">Este pedido no tiene prendas registradas.</div>';
-      return;
-    }
-    cuerpo.innerHTML = piezas
-      .map(
-        ([nodo, p]) => `
-        <div class="fila" style="margin-bottom:12px;">
-          ${p.foto ? `<img class="miniatura" src="${escapeHtml(p.foto)}" alt="" loading="lazy" />` : ""}
-          <div class="crece">
-            <h3>${escapeHtml(p.talla)} · ${escapeHtml(p.color)}</h3>
-            <p>${escapeHtml(p.tipoDeTela)}</p>
-            <p>${escapeHtml(p.especificaciones)}</p>
-          </div>
-          <div class="precio ${Number(p.precio) > 0 ? "" : "pendiente"}">${Number(p.precio) > 0 ? precio(p.precio) : "Por confirmar"}</div>
-        </div>`
-      )
-      .join("");
+    await cerrarPedido(clienta, boton.dataset.cerrar);
+    aviso("Pedido cerrado. ¡Gracias!", "exito");
   } catch (e) {
-    cuerpo.innerHTML = '<div class="vacio">No se pudo cargar el detalle.</div>';
+    console.error(e);
+    aviso(e.message === "vacio" ? "Ese pedido no tiene prendas. Agregue al menos una antes de cerrarlo." : "No se pudo cerrar el pedido. Intente de nuevo.", "error");
+    boton.disabled = false;
+    boton.textContent = "Cerrar pedido";
   }
 }

@@ -24,9 +24,16 @@
     "PEDIDOS": {
       "$tel": {
         ".read": "auth != null && root.child('CLIENTAS_WEB').child(auth.uid).val() === $tel",
+
+        "mis pedidos": {
+          "$pedido": {
+            ".write": "auth != null && root.child('CLIENTAS_WEB').child(auth.uid).val() === $tel && (!data.exists() || data.child('estatus').val() === 'abierto')"
+          }
+        },
+
         "$pedido": {
           "$nodo": {
-            ".write": "auth != null && root.child('CLIENTAS_WEB').child(auth.uid).val() === $tel && !data.exists()"
+            ".write": "auth != null && root.child('CLIENTAS_WEB').child(auth.uid).val() === $tel && newData.parent().parent().child('mis pedidos').child($pedido).child('estatus').val() === 'abierto'"
           }
         }
       }

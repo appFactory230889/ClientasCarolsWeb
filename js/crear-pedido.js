@@ -1,37 +1,79 @@
 import { db, storage } from "./firebase-config.js";
-import { ref, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
+import { ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
 import { ref as refAlmacen, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-storage.js";
 import { exigirSesion } from "./sesion.js";
-import { escapeHtml, dinero, precio, aviso, entradas, comprimirImagen, deInputAFechaGuardada, aISO } from "./utils.js";
+import { escapeHtml, dinero, precio, aviso, entradas, comprimirImagen, deInputAFechaGuardada, parsearFecha, aISO } from "./utils.js";
+import {
+  rutaPiezas, rutaResumen, piezasDe, totalDe, crearPedido, agregarPrenda, quitarPrenda, cerrarPedido, TEXTO_CIERRE,
+} from "./pedidos-datos.js";
 
-// Los pedidos de las clientas de Carol´s se guardan exactamente como los de la app y el ERP:
-//   PEDIDOS/{tel}/{codigoPedido}/{nodoID}        cada prenda
-//   PEDIDOS/{tel}/mis pedidos/{codigoPedido}     resumen (monto, fechas, estatus)
-//   VENTAS GLOBALES/Pedidos Carol´s/{codigo}     para que aparezca en Ventas del ERP
-// Todo se escribe junto, en UNA sola operación, al enviar el pedido (nunca quedan pedidos a medias).
-const DESTINO = "Pedidos Carol´s";
-const VENDEDORA = "Carol´s";
+// Pantalla de un pedido ABIERTO: dos pestañas, "Agregar prenda" y "Detalle del pedido". El pedido se crea al
+// guardar la primera prenda y cada prenda se guarda al instante; con ?codigo=… se retoma un pedido abierto.
 const TALLAS_GRANDES = ["XL", "XXL"];
 
 let clienta = null;
+let codigo = new URLSearchParams(window.location.search).get("codigo") || null;
+let fechaEntrega = null; // "d/M/yyyy" del pedido (se fija al crearlo)
 let metodo = "catalogo";
 let catalogo = null; // { codigo, foto, precio1, precio2 }
 let archivoFoto = null;
-let telas = []; // nombres de TELAS
-let coloresPorTela = {}; // tela -> [{color, codColor, imagen, disponible}]
+let telas = [];
+let coloresPorTela = {};
 let colorElegido = null;
-const prendas = [];
+let vigilando = false;
+let cerrando = false; // evita que el aviso de "pedido cerrado" redirija antes de mostrar el mensaje de éxito
 
 const $ = (id) => document.getElementById(id);
 const hoy = new Date();
-const manana = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
-$("fecha-entrega").min = aISO(manana);
+$("fecha-entrega").min = aISO(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1));
 
-exigirSesion().then((c) => {
+/* ---------------------------------------------------------------- pestañas */
+document.querySelectorAll(".pestanas button").forEach((b) =>
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".pestanas button").forEach((x) => x.classList.toggle("activo", x === b));
+    document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("activo", p.id === "panel-" + b.dataset.panel));
+  })
+);
+function irAPestana(nombre) {
+  document.querySelector(`.pestanas button[data-panel="${nombre}"]`).click();
+}
+
+/* ---------------------------------------------------------------- inicio */
+exigirSesion().then(async (c) => {
   clienta = c;
-  if (c.nombre) $("nombre-clienta").textContent = c.nombre + " · nuevo pedido";
   cargarTelas();
+  if (!codigo) return;
+  const resumen = (await get(ref(db, rutaResumen(c.tel, codigo)))).val();
+  if (!resumen || resumen.estatus === "cerrado") {
+    // No existe o ya está cerrado: solo se puede consultar.
+    window.location.replace(resumen ? `pedido-detalle.html?codigo=${encodeURIComponent(codigo)}` : "pedidos.html");
+    return;
+  }
+  fijarPedido(resumen.fechaDeRecepcion);
+  vigilarPedido();
 });
+
+// Con el pedido ya creado, la fecha de entrega queda fija.
+function fijarPedido(fecha) {
+  fechaEntrega = fecha;
+  const f = parsearFecha(fecha);
+  if (f) $("fecha-entrega").value = aISO(f);
+  $("fecha-entrega").disabled = true;
+  $("ayuda-fecha").textContent = "La fecha de este pedido ya quedó registrada.";
+  $("subtitulo").textContent = `Pedido ${codigo}`;
+  $("titulo-pedido").textContent = `Pedido ${codigo}`;
+}
+
+function vigilarPedido() {
+  if (vigilando) return;
+  vigilando = true;
+  onValue(ref(db, rutaPiezas(clienta.tel, codigo)), (snap) => pintarPrendas(piezasDe(snap.val())));
+  onValue(ref(db, `${rutaResumen(clienta.tel, codigo)}/estatus`), (snap) => {
+    if (snap.val() === "cerrado" && !cerrando) {
+      window.location.replace(`pedido-detalle.html?codigo=${encodeURIComponent(codigo)}`);
+    }
+  });
+}
 
 /* ---------------------------------------------------------------- telas y colores (dinámicos) */
 // Las telas salen de TELAS y los colores de COLORES/{tela}: lo que administración agrega o marca "No disponible"
@@ -47,7 +89,7 @@ function cargarTelas() {
     coloresPorTela = {};
     for (const [tela, colores] of entradas(snap.val())) {
       coloresPorTela[tela] = entradas(colores)
-        .map(([codigo, c]) => ({ codColor: c.codColor || codigo, color: c.color || "", imagen: c.imagen || "", disponible: c.disponible !== false }))
+        .map(([cod, c]) => ({ codColor: c.codColor || cod, color: c.color || "", imagen: c.imagen || "", disponible: c.disponible !== false }))
         .filter((c) => c.color);
     }
     pintarTelas();
@@ -55,14 +97,9 @@ function cargarTelas() {
   });
 }
 
-function coloresDisponibles(tela) {
-  return (coloresPorTela[tela] || []).filter((c) => c.disponible);
-}
-
+const coloresDisponibles = (tela) => (coloresPorTela[tela] || []).filter((c) => c.disponible);
 // Una tela con colores registrados pero todos agotados no se puede pedir.
-function telaSinColores(tela) {
-  return (coloresPorTela[tela] || []).length > 0 && coloresDisponibles(tela).length === 0;
-}
+const telaSinColores = (tela) => (coloresPorTela[tela] || []).length > 0 && coloresDisponibles(tela).length === 0;
 
 function pintarTelas() {
   const select = $("tela");
@@ -109,7 +146,6 @@ function pintarColores() {
     })
   );
 }
-
 $("tela").addEventListener("change", () => {
   colorElegido = null;
   pintarColores();
@@ -128,9 +164,14 @@ function elegirMetodo(m) {
 $("metodo-catalogo").addEventListener("click", () => elegirMetodo("catalogo"));
 $("metodo-foto").addEventListener("click", () => elegirMetodo("foto"));
 
+let urlVistaPrevia = null;
 function actualizarVistaPrevia() {
   const img = $("vista-previa");
-  const url = metodo === "catalogo" ? (catalogo && catalogo.foto) : archivoFoto && URL.createObjectURL(archivoFoto);
+  if (urlVistaPrevia) URL.revokeObjectURL(urlVistaPrevia);
+  urlVistaPrevia = null;
+  let url = null;
+  if (metodo === "catalogo") url = catalogo && catalogo.foto;
+  else if (archivoFoto) url = urlVistaPrevia = URL.createObjectURL(archivoFoto);
   img.hidden = !url;
   if (url) img.src = url;
 }
@@ -142,22 +183,22 @@ $("foto-propia").addEventListener("change", (e) => {
 });
 
 async function buscarCatalogo() {
-  const codigo = $("codigo-catalogo").value.trim();
+  const cod = $("codigo-catalogo").value.trim();
   const campo = $("campo-codigo");
   campo.classList.remove("con-error");
   catalogo = null;
-  if (!codigo || /[.#$\[\]\/]/.test(codigo)) {
+  if (!cod || /[.#$\[\]\/]/.test(cod)) {
     campo.classList.add("con-error");
     actualizarVistaPrevia();
     return;
   }
   try {
-    const snap = await get(ref(db, `CATALOGO/Todas las prendas/${codigo}`));
+    const snap = await get(ref(db, `CATALOGO/Todas las prendas/${cod}`));
     if (!snap.exists()) {
       campo.classList.add("con-error");
     } else {
       const v = snap.val();
-      catalogo = { codigo, foto: v.foto || "", precio1: String(v.precio1 ?? "0"), precio2: String(v.precio2 ?? v.precio1 ?? "0") };
+      catalogo = { codigo: cod, foto: v.foto || "", precio1: String(v.precio1 ?? "0"), precio2: String(v.precio2 ?? v.precio1 ?? "0") };
       aviso("Prenda encontrada", "exito");
     }
   } catch (e) {
@@ -175,10 +216,7 @@ $("codigo-catalogo").addEventListener("keydown", (e) => {
 });
 
 // El precio depende de la talla: XL y XXL usan precio2; las demás, precio1.
-function precioDe(item, talla) {
-  if (!item) return null;
-  return TALLAS_GRANDES.includes(talla) ? item.precio2 : item.precio1;
-}
+const precioDe = (item, talla) => (item ? (TALLAS_GRANDES.includes(talla) ? item.precio2 : item.precio1) : null);
 
 function actualizarPrecioInfo() {
   const info = $("precio-info");
@@ -195,13 +233,20 @@ function actualizarPrecioInfo() {
 }
 $("talla").addEventListener("change", actualizarPrecioInfo);
 
-/* ---------------------------------------------------------------- agregar prenda */
+/* ---------------------------------------------------------------- guardar prenda (al instante) */
 function marcar(campoId, conError) {
   $(campoId).classList.toggle("con-error", conError);
   return !conError;
 }
 
-$("btn-agregar").addEventListener("click", () => {
+async function subirFoto(archivo) {
+  const blob = await comprimirImagen(archivo);
+  const destino = refAlmacen(storage, `Fotos Subidas/img_${Date.now()}.jpg`);
+  await uploadBytes(destino, blob, { contentType: "image/jpeg" });
+  return getDownloadURL(destino);
+}
+
+$("btn-agregar").addEventListener("click", async () => {
   const talla = $("talla").value;
   const tela = $("tela").value;
   const especificaciones = $("especificaciones").value.trim();
@@ -209,7 +254,7 @@ $("btn-agregar").addEventListener("click", () => {
   const color = hayColores ? (colorElegido ? colorElegido.color : "") : $("color-texto").value.trim();
 
   let ok = true;
-  ok = marcar("campo-fecha", !$("fecha-entrega").value) && ok;
+  if (!codigo) ok = marcar("campo-fecha", !$("fecha-entrega").value) && ok;
   ok = marcar("campo-talla", !talla) && ok;
   ok = marcar("campo-tela", !tela) && ok;
   ok = marcar("campo-color", !color) && ok;
@@ -228,184 +273,116 @@ $("btn-agregar").addEventListener("click", () => {
   }
 
   const delCatalogo = metodo === "catalogo";
-  prendas.push({
+  const prenda = {
     talla,
     tipoDeTela: tela,
     color,
     estampado: hayColores && colorElegido ? colorElegido.codColor : "ninguno",
     urlEstampado: hayColores && colorElegido && colorElegido.imagen ? colorElegido.imagen : "ninguno",
     especificaciones,
-    foto: delCatalogo ? catalogo.foto : "",
-    archivo: delCatalogo ? null : archivoFoto,
-    vistaPrevia: delCatalogo ? catalogo.foto : URL.createObjectURL(archivoFoto),
     precio: delCatalogo ? precioDe(catalogo, talla) : "0",
     precio1: delCatalogo ? catalogo.precio1 : "0",
     precio2: delCatalogo ? catalogo.precio2 : "0",
-  });
+  };
 
-  // Se limpia solo lo de la prenda; la fecha y las prendas ya agregadas se conservan.
+  const btn = $("btn-agregar");
+  btn.disabled = true;
+  btn.textContent = "Guardando…";
+  try {
+    const urlFoto = delCatalogo ? catalogo.foto : await subirFoto(archivoFoto);
+    if (!codigo) {
+      const fecha = deInputAFechaGuardada($("fecha-entrega").value);
+      codigo = await crearPedido(clienta, fecha, prenda, urlFoto);
+      fijarPedido(fecha);
+      // Si recarga la página, vuelve a este mismo pedido.
+      window.history.replaceState(null, "", `crear-pedido.html?codigo=${encodeURIComponent(codigo)}`);
+      vigilarPedido();
+    } else {
+      await agregarPrenda(clienta, codigo, fechaEntrega, prenda, urlFoto);
+    }
+    aviso("Prenda guardada en su pedido", "exito");
+    limpiarFormulario();
+  } catch (e) {
+    console.error(e);
+    aviso("No se pudo guardar la prenda. Revise su conexión e intente de nuevo.", "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Guardar prenda y continuar";
+  }
+});
+
+function limpiarFormulario() {
   $("talla").value = "";
   $("especificaciones").value = "";
   $("color-texto").value = "";
   $("codigo-catalogo").value = "";
   $("foto-propia").value = "";
+  $("tela").value = "";
   colorElegido = null;
   catalogo = null;
   archivoFoto = null;
-  $("tela").value = "";
   pintarColores();
   actualizarVistaPrevia();
   actualizarPrecioInfo();
-  pintarPrendas();
-  aviso("Prenda agregada al pedido", "exito");
-});
+}
 
-/* ---------------------------------------------------------------- lista del pedido */
-function pintarPrendas() {
+/* ---------------------------------------------------------------- detalle del pedido */
+function pintarPrendas(piezas) {
   const cont = $("lista-prendas");
-  $("btn-enviar").disabled = prendas.length === 0;
-  $("bloque-total").hidden = prendas.length === 0;
-  if (!prendas.length) {
-    cont.innerHTML = '<div class="vacio" style="padding:18px 0;">Aún no ha agregado prendas.</div>';
+  $("pestana-detalle").textContent = piezas.length ? `Detalle del pedido (${piezas.length})` : "Detalle del pedido";
+  $("btn-cerrar").hidden = !piezas.length;
+  $("ayuda-cerrar").hidden = !piezas.length;
+  $("bloque-total").hidden = !piezas.length;
+  if (!piezas.length) {
+    cont.innerHTML = '<div class="vacio" style="padding:18px 0;">Aún no ha guardado prendas.</div>';
     $("nota-total").hidden = true;
     return;
   }
-  cont.innerHTML = prendas
+  cont.innerHTML = piezas
     .map(
-      (p, i) => `
-      <div class="fila" style="margin-bottom:12px;">
-        ${p.vistaPrevia ? `<img class="miniatura" src="${escapeHtml(p.vistaPrevia)}" alt="" />` : ""}
+      ([nodo, p]) => `
+      <div class="fila" style="margin-bottom:14px;">
+        ${p.foto ? `<img class="miniatura" src="${escapeHtml(p.foto)}" alt="" loading="lazy" />` : ""}
         <div class="crece">
           <h3>${escapeHtml(p.talla)} · ${escapeHtml(p.color)}</h3>
           <p>${escapeHtml(p.tipoDeTela)}</p>
           <p>${escapeHtml(p.especificaciones)}</p>
-          <button class="btn btn-peligro btn-chico" data-quitar="${i}" type="button" style="margin-top:6px;">Quitar</button>
+          <button class="btn btn-peligro btn-chico" data-quitar="${escapeHtml(nodo)}" type="button" style="margin-top:6px;">Quitar</button>
         </div>
         <div class="precio ${Number(p.precio) > 0 ? "" : "pendiente"}">${Number(p.precio) > 0 ? precio(p.precio) : "Precio por confirmar"}</div>
       </div>`
     )
     .join("");
   cont.querySelectorAll("[data-quitar]").forEach((b) =>
-    b.addEventListener("click", () => {
-      prendas.splice(Number(b.dataset.quitar), 1);
-      pintarPrendas();
+    b.addEventListener("click", async () => {
+      if (!window.confirm("¿Quitar esta prenda del pedido?")) return;
+      try {
+        await quitarPrenda(clienta, codigo, b.dataset.quitar);
+        aviso("Prenda quitada", "exito");
+      } catch (e) {
+        aviso("No se pudo quitar la prenda.", "error");
+      }
     })
   );
-  $("total").textContent = dinero(totalConocido());
-  $("nota-total").hidden = !prendas.some((p) => !(Number(p.precio) > 0));
+  $("total").textContent = dinero(totalDe(piezas));
+  $("nota-total").hidden = !piezas.some(([, p]) => !(Number(p.precio) > 0));
 }
 
-function totalConocido() {
-  return prendas.reduce((suma, p) => suma + (Number(p.precio) || 0), 0);
-}
-
-window.addEventListener("beforeunload", (e) => {
-  if (prendas.length && $("dialogo-exito").hidden) {
-    e.preventDefault();
-    e.returnValue = "";
-  }
-});
-
-/* ---------------------------------------------------------------- enviar */
-// Código de pedido de 6 dígitos (HHmmss, como en la app). Como VENTAS GLOBALES usa solo el código como llave,
-// se verifica que no esté tomado por otra clienta antes de usarlo.
-async function codigoLibre() {
-  const p = (n) => String(n).padStart(2, "0");
-  const ahora = new Date();
-  const candidatos = [`${p(ahora.getHours())}${p(ahora.getMinutes())}${p(ahora.getSeconds())}`];
-  for (let i = 0; i < 8; i++) candidatos.push(String(Math.floor(Math.random() * 1000000)).padStart(6, "0"));
-  for (const codigo of candidatos) {
-    const [global, propio] = await Promise.all([
-      get(ref(db, `VENTAS GLOBALES/${DESTINO}/${codigo}`)),
-      get(ref(db, `PEDIDOS/${clienta.tel}/${codigo}`)),
-    ]);
-    if (!global.exists() && !propio.exists()) return codigo;
-  }
-  throw new Error("No se pudo generar el código del pedido");
-}
-
-async function subirFoto(archivo, i) {
-  const blob = await comprimirImagen(archivo);
-  const destino = refAlmacen(storage, `Fotos Subidas/img_${Date.now()}_${i}.jpg`);
-  await uploadBytes(destino, blob, { contentType: "image/jpeg" });
-  return getDownloadURL(destino);
-}
-
-$("btn-enviar").addEventListener("click", async () => {
-  if (!$("fecha-entrega").value) {
-    marcar("campo-fecha", true);
-    aviso("Elija la fecha en que necesita su pedido.", "error");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    return;
-  }
-  if (!prendas.length) return;
-  if (!window.confirm(`¿Enviar el pedido con ${prendas.length} ${prendas.length === 1 ? "prenda" : "prendas"}?`)) return;
-
-  const btn = $("btn-enviar");
+$("btn-cerrar").addEventListener("click", async () => {
+  if (!window.confirm(TEXTO_CIERRE)) return;
+  const btn = $("btn-cerrar");
   btn.disabled = true;
-  btn.textContent = "Enviando…";
+  btn.textContent = "Cerrando…";
+  cerrando = true;
   try {
-    // 1) Fotos propias (comprimidas) al almacenamiento.
-    const urls = [];
-    for (let i = 0; i < prendas.length; i++) {
-      urls.push(prendas[i].archivo ? await subirFoto(prendas[i].archivo, i) : prendas[i].foto);
-    }
-
-    // 2) Todo el pedido en una sola escritura.
-    const codigo = await codigoLibre();
-    const ahora = new Date();
-    const fechaEntrega = deInputAFechaGuardada($("fecha-entrega").value);
-    const fechaDeCreacion = new Intl.DateTimeFormat("es", {
-      day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true,
-    }).format(ahora);
-    const base = `PEDIDOS/${clienta.tel}`;
-    const cambios = {};
-    prendas.forEach((p, i) => {
-      const nodo = String(i + 1);
-      cambios[`${base}/${codigo}/${nodo}`] = {
-        foto: urls[i],
-        especificaciones: p.especificaciones,
-        talla: p.talla,
-        color: p.color,
-        tipoDeTela: p.tipoDeTela,
-        estampado: p.estampado,
-        urlEstampado: p.urlEstampado,
-        fechaDeRecepcion: fechaEntrega,
-        codigoDeCliente: clienta.tel,
-        nombreCliente: clienta.nombre,
-        precio: String(p.precio),
-        precio1: String(p.precio1),
-        precio2: String(p.precio2),
-        estatus: "cerrado",
-        nodoID: nodo,
-        codigoDePedido: codigo,
-      };
-    });
-    const registro = {
-      nombreCliente: clienta.nombre,
-      fechaDeCreacion,
-      fechaDeCreacionISO: aISO(ahora),
-      fechaDeRecepcion: fechaEntrega,
-      codigoDeCliente: clienta.tel,
-      codigoDePedido: codigo,
-      estatus: "cerrado",
-      codVendedora: "",
-      nombreVendedora: VENDEDORA,
-      seo: `${clienta.nombre}${codigo}`,
-      ultimoNodo: String(prendas.length),
-      origen: "Web clientas",
-    };
-    cambios[`${base}/mis pedidos/${codigo}`] = { ...registro, monto: String(totalConocido()) };
-    cambios[`VENTAS GLOBALES/${DESTINO}/${codigo}`] = registro;
-    await update(ref(db), cambios);
-
-    prendas.length = 0;
+    await cerrarPedido(clienta, codigo);
     $("codigo-enviado").textContent = codigo;
     $("dialogo-exito").hidden = false;
   } catch (e) {
     console.error(e);
-    aviso("No se pudo enviar el pedido. Revise su conexión e intente de nuevo.", "error");
+    aviso(e.message === "vacio" ? "Agregue al menos una prenda antes de cerrar el pedido." : "No se pudo cerrar el pedido. Intente de nuevo.", "error");
+    cerrando = false;
     btn.disabled = false;
-    btn.textContent = "Enviar pedido";
+    btn.textContent = "Cerrar pedido";
   }
 });
