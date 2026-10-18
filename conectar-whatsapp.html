@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#E896B8" />
+  <title>Conectar WhatsApp · Carol´s</title>
+  <link rel="icon" href="img/logo.png" />
+  <style>
+    body { margin: 0; background: #fdf6f9; color: #2b2b2b; font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; }
+    header { text-align: center; }
+    header img { width: 80px; height: 80px; border-radius: 50%; }
+    h1 { font-size: 1.45rem; margin: 10px 0 4px; }
+    .tarjeta { background: #fff; border-radius: 16px; padding: 20px; margin-top: 20px; box-shadow: 0 2px 12px rgba(180, 86, 127, .12); }
+    ol { padding-left: 20px; margin: 8px 0 0; }
+    li { margin-bottom: 6px; }
+    button { width: 100%; margin-top: 18px; padding: 14px; border: 0; border-radius: 12px; background: #1877f2; color: #fff; font-size: 1.05rem; font-weight: 600; cursor: pointer; }
+    button:disabled { background: #9bb8e8; cursor: default; }
+    #estado { margin-top: 18px; white-space: pre-line; }
+    .ok { color: #11753a; } .error { color: #b3261e; } .info { color: #555; }
+    .aviso { background: #fff4e5; border-radius: 10px; padding: 12px; font-size: .95rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <img src="img/logo.png" alt="Carol´s" />
+      <h1>Conectar el WhatsApp de Carol´s al asistente</h1>
+      <div class="info">Su app WhatsApp Business sigue funcionando igual en su teléfono.</div>
+    </header>
+
+    <div class="tarjeta">
+      <strong>Antes de empezar</strong>
+      <ol>
+        <li>Tenga a mano el teléfono con <b>WhatsApp Business</b> (actualizado) y con internet.</li>
+        <li>Inicie sesión con <b>su</b> Facebook (el que administra Carol´s).</li>
+        <li>Cuando Meta lo pida, <b>escanee el código QR</b> desde WhatsApp Business y acepte compartir el historial.</li>
+        <li>No cierre esta página hasta ver el mensaje final.</li>
+      </ol>
+      <p class="aviso">Al conectar, WhatsApp Web y otros dispositivos enlazados se desconectan; después se vuelven a enlazar.</p>
+      <button id="btn" disabled>Cargando…</button>
+      <div id="estado"></div>
+    </div>
+  </main>
+
+  <script>
+    const APP_ID = "4088412964628773";
+    const FUNCION = "https://us-central1-distribuidora-carols.cloudfunctions.net/conectarWhatsapp";
+    // El id de configuración (Facebook Login para empresas) se pasa en la dirección: conectar-whatsapp.html?config=123…
+    const CONFIG_ID = new URLSearchParams(location.search).get("config");
+
+    const btn = document.getElementById("btn");
+    const estado = document.getElementById("estado");
+    const mostrar = (texto, clase = "info") => { estado.className = clase; estado.textContent = texto; };
+
+    let sesion = {};   // waba_id y phone_number_id que manda Meta al terminar
+    let codigo = null; // código de un solo uso (vence en 30 segundos)
+    let enviado = false;
+
+    window.addEventListener("message", (event) => {
+      if (!String(event.origin).endsWith("facebook.com")) return;
+      let datos;
+      try { datos = JSON.parse(event.data); } catch { return; }
+      if (datos.type !== "WA_EMBEDDED_SIGNUP") return;
+      if (String(datos.event).startsWith("FINISH")) {
+        sesion = { wabaId: datos.data?.waba_id, phoneNumberId: datos.data?.phone_number_id };
+        enviar();
+      } else if (datos.event === "CANCEL") {
+        mostrar(`Se canceló en el paso: ${datos.data?.current_step || "desconocido"}. Puede intentarlo de nuevo.`, "error");
+        btn.disabled = false;
+      } else if (datos.event === "ERROR") {
+        mostrar(`Meta reportó un error: ${datos.data?.error_message || datos.data?.error_code}`, "error");
+        btn.disabled = false;
+      }
+    });
+
+    // Se manda en cuanto hay código y datos de la sesión (o a los 6 s si Meta no mandó la sesión).
+    async function enviar(forzar = false) {
+      if (enviado || !codigo || (!sesion.wabaId && !forzar)) return;
+      enviado = true;
+      mostrar("Conectando el número con el asistente… (no cierre la página)");
+      try {
+        const r = await fetch(FUNCION, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: codigo, wabaId: sesion.wabaId || "", phoneNumberId: sesion.phoneNumberId || "" }),
+        });
+        const res = await r.json();
+        if (!res.ok) throw new Error(res.error || "Error desconocido");
+        mostrar(
+          `✅ ¡Listo! El asistente ya atiende el número ${res.numero}.\n` +
+          `Coexistencia con la app: ${res.coexistencia ? "sí" : "no"}\n` +
+          `Contactos: ${res.sincronizacion?.smb_app_state_sync}\nHistorial: ${res.sincronizacion?.history}\n\n` +
+          `Deje la app WhatsApp Business abierta un rato mientras se sincroniza el historial.`, "ok");
+      } catch (e) {
+        mostrar(`No se pudo terminar la conexión: ${e.message}\nMande una captura de esta pantalla.`, "error");
+        btn.disabled = false;
+        enviado = false;
+      }
+    }
+
+    function iniciar() {
+      if (!CONFIG_ID) return mostrar("Falta el id de configuración en la dirección (…?config=…).", "error");
+      btn.disabled = true;
+      codigo = null; sesion = {}; enviado = false;
+      mostrar("Siga los pasos en la ventana de Meta…");
+      FB.login((respuesta) => {
+        if (respuesta.authResponse?.code) {
+          codigo = respuesta.authResponse.code;
+          enviar();
+          setTimeout(() => enviar(true), 6000);
+        } else if (!estado.classList.contains("error")) {
+          mostrar("No se completó el inicio de sesión. Puede intentarlo de nuevo.", "error");
+          btn.disabled = false;
+        }
+      }, {
+        config_id: CONFIG_ID,
+        response_type: "code",
+        override_default_response_type: true,
+        extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" },
+      });
+    }
+
+    window.fbAsyncInit = function () {
+      FB.init({ appId: APP_ID, autoLogAppEvents: true, xfbml: false, version: "v25.0" });
+      btn.textContent = "Conectar con WhatsApp Business";
+      btn.disabled = !CONFIG_ID;
+      if (!CONFIG_ID) mostrar("Falta el id de configuración en la dirección (…?config=…).", "error");
+      btn.addEventListener("click", iniciar);
+    };
+  </script>
+  <script async defer crossorigin="anonymous" src="https://connect.facebook.net/es_LA/sdk.js"></script>
+</body>
+</html>
