@@ -85,7 +85,7 @@
         const r = await fetch(FUNCION, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: codigo, wabaId: sesion.wabaId || "", phoneNumberId: sesion.phoneNumberId || "" }),
+          body: JSON.stringify({ code: codigo, wabaId: sesion.wabaId || "", phoneNumberId: sesion.phoneNumberId || "", pagina: location.href }),
         });
         const res = await r.json();
         if (!res.ok) throw new Error(res.error || "Error desconocido");
