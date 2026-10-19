@@ -48,8 +48,11 @@
   <script>
     const APP_ID = "4088412964628773";
     const FUNCION = "https://us-central1-distribuidora-carols.cloudfunctions.net/conectarWhatsapp";
-    // El id de configuración (Facebook Login para empresas) se pasa en la dirección: conectar-whatsapp.html?config=123…
-    const CONFIG_ID = new URLSearchParams(location.search).get("config");
+    // Id de configuración de "Inicio de sesión con Facebook para empresas" (registro insertado de WhatsApp).
+    // Va aquí y no en la dirección: Meta amarra el código a la dirección EXACTA de la página, y solo
+    // .../conectar-whatsapp.html (sin ?…) está en la lista de direcciones permitidas de la app.
+    const CONFIG_ID = "1485505763406880";
+    if (location.search) history.replaceState(null, "", location.pathname); // quita ?config=… de enlaces viejos
 
     const btn = document.getElementById("btn");
     const estado = document.getElementById("estado");
